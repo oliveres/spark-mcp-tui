@@ -48,14 +48,24 @@ class McpClient:
         except Exception as exc:
             raise OfflineError(f"MCP call failed: {exc}") from exc
         if getattr(result, "structuredContent", None) is not None:
-            return result.structuredContent
+            sc = result.structuredContent
+            # FastMCP wraps non-object return types (list, str, int, ...) as
+            # {"result": value} because MCP structuredContent must be a JSON
+            # object. Unwrap the envelope transparently so callers see the
+            # underlying value.
+            if isinstance(sc, dict) and set(sc.keys()) == {"result"}:
+                return sc["result"]
+            return sc
         for block in getattr(result, "content", []):
             if getattr(block, "type", None) == "text":
                 text = getattr(block, "text", "")
                 try:
-                    return json.loads(text)
+                    parsed = json.loads(text)
                 except json.JSONDecodeError:
                     return text
+                if isinstance(parsed, dict) and set(parsed.keys()) == {"result"}:
+                    return parsed["result"]
+                return parsed
         return None
 
     async def aclose(self) -> None:

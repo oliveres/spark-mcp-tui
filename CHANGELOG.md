@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-04-17
+
+### Fixed
+
+- `spark-tui` crashed with `AttributeError: 'str' object has no
+  attribute 'get'` when rendering recipe lists. FastMCP wraps non-
+  object return types (`list`, `str`, `int`, ...) into
+  `{"result": <value>}` because MCP's `structuredContent` field must
+  be a JSON object. The TUI's MCP client now unwraps that envelope
+  transparently for both `structuredContent` and the text-content
+  fallback path, so tools returning `list[RecipeSummary]` produce the
+  list directly.
+
 ## [0.1.4] - 2026-04-17
 
 ### Fixed

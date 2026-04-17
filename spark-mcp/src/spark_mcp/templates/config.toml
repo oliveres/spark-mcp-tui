@@ -27,6 +27,17 @@ rate_limit_per_minute = 120
 # CORS allow-list for /mcp. Empty list = default-deny (no browser clients).
 cors_allow_origins = []
 
+# FastMCP DNS-rebinding protection. Default off because Bearer token auth
+# plus a LAN/Tailscale boundary is the intended security model; enabling
+# this check rejects every Host header other than 127.0.0.1/localhost,
+# so Claude Code / TUI on other machines cannot connect. Turn on only
+# when operating behind a reverse proxy together with allowed_hosts.
+dns_rebinding_protection = false
+
+# Explicit allow-list of Host header values when DNS-rebinding protection
+# is on. Supports "host:*" for any port.
+allowed_hosts = []
+
 [cluster]
 # Human-readable cluster name, shown in clients
 name = "my-spark-cluster"

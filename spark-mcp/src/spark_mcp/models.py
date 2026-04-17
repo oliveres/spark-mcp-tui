@@ -24,6 +24,14 @@ class ServerSettings(BaseModel):
     metrics_auth: Literal["bearer", "none"] = "bearer"
     rate_limit_per_minute: int = Field(default=120, ge=0)
     cors_allow_origins: list[str] = Field(default_factory=list)
+    # FastMCP ships a DNS rebinding protection that only allows Host:
+    # 127.0.0.1 / localhost by default. For LAN deployments behind bearer
+    # auth + (recommended) Tailscale/VPN, this is redundant and blocks every
+    # non-loopback client (e.g. Claude Code on another machine). We default
+    # to False; enable explicitly when operating behind a reverse proxy
+    # alongside allowed_hosts.
+    dns_rebinding_protection: bool = False
+    allowed_hosts: list[str] = Field(default_factory=list)
 
 
 class ClusterSettings(BaseModel):

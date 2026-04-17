@@ -27,6 +27,7 @@ from typing import Any
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from prometheus_client import (
     CollectorRegistry,
     Counter,
@@ -233,11 +234,17 @@ def _refresh_metrics(
 
 def build_mcp(ctx: ServerContext, metrics: dict[str, Any] | None = None) -> FastMCP:
     """Build a FastMCP instance with every PRD-listed tool and resource registered."""
+    transport_security = TransportSecuritySettings(
+        enable_dns_rebinding_protection=ctx.cfg.server.dns_rebinding_protection,
+        allowed_hosts=ctx.cfg.server.allowed_hosts,
+        allowed_origins=ctx.cfg.server.cors_allow_origins,
+    )
     mcp = FastMCP(
         "spark-mcp",
         streamable_http_path="/",  # mount root, avoids /mcp/mcp double prefix
         stateless_http=True,  # no Mcp-Session-Id handshake required
         json_response=True,
+        transport_security=transport_security,
     )
     cfg = ctx.cfg
 

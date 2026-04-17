@@ -21,6 +21,8 @@ def sample_toml() -> str:
         metrics_auth = "bearer"
         rate_limit_per_minute = 120
         cors_allow_origins = []
+        dns_rebinding_protection = false
+        allowed_hosts = []
 
         [cluster]
         name = "test-cluster"

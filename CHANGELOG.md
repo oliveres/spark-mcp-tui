@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-04-17
+
+### Fixed
+
+- Claude Code on a remote workstation got `HTTP/1.1 421 Misdirected
+  Request — Invalid Host header` when connecting to the MCP server via
+  hostname or LAN IP. FastMCP ships a DNS rebinding protection that
+  only allows `Host: 127.0.0.1` / `localhost` by default, which blocks
+  every non-loopback client. The protection is now **off by default**
+  (bearer auth + PRD's Tailscale/VPN model make it redundant) and can
+  be re-enabled together with an explicit `allowed_hosts` list:
+
+  ```toml
+  [server]
+  dns_rebinding_protection = true
+  allowed_hosts = ["spark-head.my-tailnet.ts.net", "spark-1.local"]
+  ```
+
+  Operators upgrading: re-run `spark-mcp init` or add the two fields to
+  your existing `config.toml` manually.
+
 ## [0.1.12] - 2026-04-17
 
 ### Fixed

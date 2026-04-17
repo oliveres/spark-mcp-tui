@@ -1,0 +1,19 @@
+recipe_version: "1"
+name: Gemma4-26B-A4B
+description: vLLM serving Gemma4-26B-A4B
+model: google/gemma-4-26B-A4B-it
+cluster_only: false
+solo_only: false
+container: vllm-node-tf5
+build_args: ["--tf5"]
+mods: ["mods/fix-gemma4-tool-parser"]
+defaults:
+  port: 8000
+  host: 0.0.0.0
+  tensor_parallel: 2
+  gpu_memory_utilization: 0.7
+  max_model_len: 262144
+command: |
+  vllm serve google/gemma-4-26B-A4B-it \
+    --max-model-len {max_model_len} \
+    --tensor-parallel-size {tensor_parallel}

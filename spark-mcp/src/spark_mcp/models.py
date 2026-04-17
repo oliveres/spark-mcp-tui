@@ -112,3 +112,78 @@ class PersistedState(BaseModel):
     active_model: ActiveModel | None = None
     last_launch_args: dict[str, Any] | None = None  # populated in Task 8
     downloads: dict[str, DownloadRecord] = Field(default_factory=dict)
+
+
+# --- Recipe models (added in Task 5) ---
+
+
+class RecipeDefaults(BaseModel):
+    """Default overrides a recipe applies before run-recipe.py invocation."""
+
+    model_config = ConfigDict(extra="allow")
+
+    port: int = Field(ge=1, le=65535)
+    host: str = "0.0.0.0"  # noqa: S104  # matches upstream vllm-docker recipe default
+    tensor_parallel: int = Field(ge=1)
+    gpu_memory_utilization: float = Field(gt=0, le=1)
+    max_model_len: int | None = None
+
+
+class Recipe(BaseModel):
+    """Recipe schema matching eugr/spark-vllm-docker recipe YAMLs.
+
+    `extra="allow"` keeps us forward-compatible with upstream-added fields.
+    """
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    recipe_version: str
+    name: str
+    description: str
+    model: str
+    cluster_only: bool = False
+    solo_only: bool = False
+    container: str | None = None
+    build_args: list[str] = Field(default_factory=list)
+    mods: list[str] = Field(default_factory=list)
+    defaults: RecipeDefaults
+    command: str
+
+
+class RecipeSummary(BaseModel):
+    """Lightweight recipe listing entry, returned by `list_recipes`."""
+
+    name: str
+    description: str
+    model: str
+    supports_cluster: bool
+    supports_solo: bool
+    is_model_cached: dict[str, bool] = Field(default_factory=dict)
+    is_active: bool = False
+    path: Path
+
+
+class ValidationResult(BaseModel):
+    """Outcome of `validate_recipe` — valid=False populates errors."""
+
+    valid: bool
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    parsed: Recipe | None = None
+
+
+class ErrorInfo(BaseModel):
+    """Structured error payload returned by any MCP tool that fails."""
+
+    code: str
+    message: str
+    details: dict[str, Any] = Field(default_factory=dict)
+    hint: str | None = None
+
+
+class OperationResult(BaseModel):
+    """Generic success-or-error wrapper used by mutation tools."""
+
+    success: bool
+    data: Any | None = None
+    error: ErrorInfo | None = None

@@ -12,11 +12,45 @@
 
 ### 1. Native Python on the head node (recommended)
 
+Install `uv` (or use system pip / pipx) and then install the packages as
+isolated tools:
+
 ```bash
+# Install uv if you don't have it
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
 git clone https://github.com/oliveres/spark-mcp-tui ~/spark-mcp-tui
 cd ~/spark-mcp-tui
-uv pip install -e ./spark-mcp        # or: pip install -e ./spark-mcp
+
+# Creates an isolated venv per tool, exposes CLIs on PATH
+uv tool install ./spark-mcp
+uv tool install ./spark-tui
+
 spark-mcp init
+```
+
+#### Editable / development install
+
+Prefer this if you'll be modifying the code:
+
+```bash
+uv venv --python 3.11
+source .venv/bin/activate
+uv pip install -e ./spark-mcp
+uv pip install -e ./spark-tui
+spark-mcp init
+```
+
+You must `source .venv/bin/activate` in every new shell, or run the CLIs
+as `uv run --with-editable ./spark-mcp spark-mcp ...`.
+
+#### pipx alternative
+
+If you prefer pipx over uv:
+
+```bash
+pipx install ./spark-mcp
+pipx install ./spark-tui
 ```
 
 `spark-mcp init` populates `~/.config/spark-mcp/{config.toml,.env}` with

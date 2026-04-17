@@ -46,37 +46,48 @@ Full product requirements live in [`docs/SPARK_MCP_PRD.md`](docs/SPARK_MCP_PRD.m
 git clone https://github.com/oliveres/spark-mcp-tui ~/spark-mcp-tui
 cd ~/spark-mcp-tui
 
-# 1. Install (use uv if you have it; pip works too)
-uv pip install -e ./spark-mcp
-uv pip install -e ./spark-tui
+# 1. Install uv if not present
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 2. First-time setup on the head node
+# 2. Install both packages as uv-managed tools (isolated envs, CLIs on PATH)
+uv tool install ./spark-mcp
+uv tool install ./spark-tui
+#
+# Alternative (development / editable install):
+#   uv venv --python 3.11
+#   source .venv/bin/activate
+#   uv pip install -e ./spark-mcp
+#   uv pip install -e ./spark-tui
+# With the editable setup you must `source .venv/bin/activate` in every
+# new shell, or call the CLIs as `uv run --with-editable ./spark-mcp spark-mcp ...`.
+
+# 3. First-time setup on the head node
 spark-mcp init            # writes ~/.config/spark-mcp/{config.toml,.env}
 
-# 3. Edit config.toml (workers, spark-vllm-docker path) and .env (SSH user/key)
+# 4. Edit config.toml (workers, spark-vllm-docker path) and .env (SSH user/key)
 nano ~/.config/spark-mcp/config.toml
 nano ~/.config/spark-mcp/.env
 
-# 4. Trust your workers' SSH host keys (first time only)
+# 5. Trust your workers' SSH host keys (first time only)
 spark-mcp ssh-trust worker-1
 spark-mcp ssh-trust worker-2
 
-# 5. Run as a systemd service (recommended) or foreground for testing
+# 6. Run as a systemd service (recommended) or foreground for testing
 spark-mcp                  # foreground
 # or:
 sudo cp ~/.config/spark-mcp/spark-mcp.service /etc/systemd/system/
 sudo systemctl enable --now spark-mcp
 
-# 6. Install skills into Claude Code / Claude Desktop
+# 7. Install skills into Claude Code / Claude Desktop
 ./spark-skills/install.sh
 
-# 7. Register the MCP server in Claude Code (from any workstation on the LAN)
+# 8. Register the MCP server in Claude Code (from any workstation on the LAN)
 TOKEN=$(grep SPARK_MCP_AUTH_TOKEN ~/.config/spark-mcp/.env | cut -d= -f2)
 claude mcp add spark-mcp --transport http \
     http://spark-head.local:8765/mcp \
     --header "Authorization: Bearer $TOKEN"
 
-# 8. Launch the TUI
+# 9. Launch the TUI
 spark-tui --profile homelab
 ```
 

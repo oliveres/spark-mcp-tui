@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-04-17
+
+### Changed
+
+- **Zero-config TUI on the head node.** When `~/.config/spark-tui/config.toml`
+  does not exist and spark-mcp is installed locally, `spark-tui` now
+  auto-discovers the server by reading `~/.config/spark-mcp/config.toml`
+  for the port and `~/.config/spark-mcp/.env` for the bearer token.
+  Builds an implicit single-profile config pointing at
+  `http://127.0.0.1:<port>/mcp`.
+- A dedicated `~/.config/spark-tui/config.toml` is still honored and
+  remains the way to configure multi-profile / remote TUI setups.
+- README quickstart step 10 collapsed from ~14 lines of TUI config to
+  just `spark-tui`.
+
 ## [0.1.1] - 2026-04-17
 
 ### Fixed

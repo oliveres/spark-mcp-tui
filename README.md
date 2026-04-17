@@ -94,23 +94,12 @@ claude mcp add spark-mcp --transport http \
     http://spark-head.local:8765/mcp \
     --header "Authorization: Bearer $TOKEN"
 
-# 10. Configure and launch the TUI (optional)
-mkdir -p ~/.config/spark-tui
-cat > ~/.config/spark-tui/config.toml <<'TOML'
-[connection]
-default_profile = "homelab"
-
-[profiles.homelab]
-mcp_url = "http://localhost:8765/mcp"
-
-[ui]
-theme = "dracula"
-refresh_interval_ms = 3000
-log_tail_lines = 200
-TOML
-echo "SPARK_TUI_TOKEN_HOMELAB=$TOKEN" > ~/.config/spark-tui/.env
-chmod 600 ~/.config/spark-tui/.env
-spark-tui --profile homelab
+# 10. Launch the TUI (zero-config when MCP + TUI run on the same machine)
+spark-tui
+# The TUI auto-discovers spark-mcp at 127.0.0.1:<port> and reads the
+# token from ~/.config/spark-mcp/.env. For remote TUI or multi-cluster
+# use, create ~/.config/spark-tui/config.toml with named profiles —
+# see docs/configuration.md for the schema.
 ```
 
 ## Security at a glance

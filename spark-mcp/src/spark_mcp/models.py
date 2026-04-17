@@ -258,3 +258,55 @@ class HfSearchResult(BaseModel):
     likes: int | None = None
     tags: list[str] = Field(default_factory=list)
     last_modified: datetime | None = None
+
+
+# --- Recipe launch + download models (added in Task 7) ---
+
+
+class LaunchArgs(BaseModel):
+    """Typed input for `launch_recipe`; persisted so `restart_cluster` can replay."""
+
+    recipe_name: str
+    overrides: dict[str, Any] = Field(default_factory=dict)
+    setup: bool = False
+    solo: bool = False
+
+
+class LaunchResult(BaseModel):
+    success: bool
+    recipe: str
+    pid: int | None = None
+    stdout: str = ""
+    stderr: str = ""
+    error: ErrorInfo | None = None
+
+
+class StopResult(BaseModel):
+    success: bool
+    per_node: dict[str, int]
+    escalated_to_kill: list[str] = Field(default_factory=list)
+
+
+class RestartResult(BaseModel):
+    success: bool
+    stopped: StopResult
+    launched: LaunchResult | None = None
+
+
+class ReadyResult(BaseModel):
+    ready: bool
+    elapsed_s: float
+    last_error: str | None = None
+
+
+class DownloadResult(BaseModel):
+    download_id: str
+    hf_id: str
+    started_at: datetime
+
+
+class DownloadProgress(BaseModel):
+    download_id: str
+    status: Literal["queued", "in_progress", "completed", "failed", "cancelled"]
+    bytes_transferred: int
+    error: str | None = None

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-04-17
+
+### Fixed
+
+- `get_cluster_status` could fail with a generic anyio TaskGroup wrapper
+  ("unhandled errors in a TaskGroup") because `Operations.all_node_status`
+  used `asyncio.gather(...)` without `return_exceptions=True`. A single
+  node raising (SSH flake, nvidia-smi oddity, ...) aborted the entire
+  tool call. `all_node_status` now catches per-node failures and
+  returns `NodeStatus(reachable=False, ...)` for those nodes.
+
+### Changed
+
+- `spark-tui`'s MCP client now walks `BaseExceptionGroup` to surface the
+  real root cause in log lines instead of the opaque
+  "unhandled errors in a TaskGroup (1 sub-exception)" anyio wrapper.
+
 ## [0.1.5] - 2026-04-17
 
 ### Fixed

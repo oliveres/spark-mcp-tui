@@ -23,6 +23,13 @@ class OfflineError(RuntimeError):
     """Raised when the MCP server is unreachable or returns a network error."""
 
 
+def _first_leaf(exc: BaseException) -> BaseException:
+    """Walk into nested BaseExceptionGroups to surface the real root cause."""
+    while isinstance(exc, BaseExceptionGroup) and exc.exceptions:
+        exc = exc.exceptions[0]
+    return exc
+
+
 class McpClient:
     def __init__(self, url: str, token: str, timeout_s: float = 15.0) -> None:
         self._url = url
@@ -44,9 +51,13 @@ class McpClient:
                 await session.initialize()
                 result = await session.call_tool(tool, arguments or {})
         except (httpx.RequestError, httpx.HTTPStatusError, ConnectionError) as exc:
-            raise OfflineError(str(exc)) from exc
+            raise OfflineError(f"{type(exc).__name__}: {exc}") from exc
+        except BaseExceptionGroup as eg:
+            # anyio task groups wrap the real error; surface the first leaf.
+            inner = _first_leaf(eg)
+            raise OfflineError(f"{type(inner).__name__}: {inner}") from inner
         except Exception as exc:
-            raise OfflineError(f"MCP call failed: {exc}") from exc
+            raise OfflineError(f"{type(exc).__name__}: {exc}") from exc
         if getattr(result, "structuredContent", None) is not None:
             sc = result.structuredContent
             # FastMCP wraps non-object return types (list, str, int, ...) as

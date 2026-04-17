@@ -98,7 +98,21 @@ class Operations:
         )
 
     async def all_node_status(self) -> list[NodeStatus]:
-        return list(await asyncio.gather(*[self.node_status(n) for n in self._cluster.all_nodes]))
+        """Per-node status in parallel. Node-level failures are converted to
+        `NodeStatus(reachable=False)` so a single bad worker cannot abort the
+        whole tool call (anyio TaskGroup otherwise wraps and reraises).
+        """
+        nodes = self._cluster.all_nodes
+        results = await asyncio.gather(
+            *[self.node_status(n) for n in nodes], return_exceptions=True
+        )
+        statuses: list[NodeStatus] = []
+        for node, res in zip(nodes, results, strict=True):
+            if isinstance(res, BaseException):
+                statuses.append(NodeStatus(name=node, reachable=False, hostname=""))
+            else:
+                statuses.append(res)
+        return statuses
 
     async def list_cached_models(self) -> list[CachedModel]:
         """Scan the local HF cache. `hub/models--<org>--<repo>` is the canonical layout."""

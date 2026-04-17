@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-04-17
+
+### Added
+
+- `RecipeSummary` now carries a `slug` field (the filename stem, e.g.
+  `gemma4-26b-a4b`). Every MCP tool taking a `name` argument expects
+  the strict filesystem-safe slug, not the free-form YAML `name:`.
+- `spark-tui` row-start binding: pressing `space` on a row (or `enter`
+  via the new `DataTable.RowSelected` handler) now launches the
+  selected recipe. The previous `enter` binding was invisible in the
+  footer because `DataTable` consumes `enter` for row selection.
+
+### Fixed
+
+- `spark-tui` Download / Start / Delete actions failed with
+  `AttributeError: 'str' object has no attribute 'get'` / `Invalid
+  recipe name 'Gemma4-26B-A4B'`. The TUI was passing the YAML
+  `name:` field to the server, which rejects non-slug names. The TUI
+  now uses `RecipeSummary.slug` for every MCP call, keeping the
+  human-friendly `name` only for display.
+
 ## [0.1.8] - 2026-04-17
 
 ### Fixed

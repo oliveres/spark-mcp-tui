@@ -102,7 +102,9 @@ class SparkTui(App[None]):
     """
 
     BINDINGS: ClassVar[list[Any]] = [
-        Binding("enter", "start_recipe", "Start"),
+        # DataTable consumes `enter` for row-select; `space` is our visible
+        # Start binding. Enter still works via the RowSelected handler below.
+        Binding("space", "start_recipe", "Start"),
         Binding("s", "stop_cluster", "Stop"),
         Binding("r", "restart_cluster", "Restart"),
         Binding("d", "download_model", "Download"),
@@ -131,6 +133,7 @@ class SparkTui(App[None]):
         self._client = McpClient(url, token)
         self._offline = False
         self._selected_recipe: str | None = None
+        self._slugs_by_row: list[str] = []
         self.theme = _resolve_theme(tui_cfg.ui.theme)
 
     def compose(self) -> ComposeResult:
@@ -203,8 +206,14 @@ class SparkTui(App[None]):
             return
         table = self.query_one("#recipes-row", DataTable)
         table.clear()
+        self._slugs_by_row.clear()
         for r in recipes:
             status = "*" if r.get("is_active") else " "
+            # Display name (YAML name:) in the visible column; slug (filename
+            # stem) remembered in parallel for MCP tool calls that require the
+            # strict filesystem-safe name.
+            slug = r.get("slug") or r["name"]
+            self._slugs_by_row.append(slug)
             table.add_row(status, r["name"], r["model"], "[RUN]" if r.get("is_active") else "")
 
     async def _refresh_logs(self) -> None:
@@ -241,21 +250,26 @@ class SparkTui(App[None]):
 
     # ---- Actions ----
 
-    def _current_recipe_name(self) -> str | None:
+    def _current_recipe_slug(self) -> str | None:
+        """Return the filesystem-safe slug of the selected recipe, suitable
+        for every MCP tool argument (see RecipeSummary.slug)."""
         table = self.query_one("#recipes-row", DataTable)
         row_index = table.cursor_row
-        if row_index < 0:
+        if row_index < 0 or row_index >= len(getattr(self, "_slugs_by_row", [])):
             return None
-        row = table.get_row_at(row_index)
-        return str(row[1]) if row else None
+        return self._slugs_by_row[row_index]
 
     async def action_start_recipe(self) -> None:
-        name = self._current_recipe_name()
-        if not name:
+        slug = self._current_recipe_slug()
+        if not slug:
             return
-        self._selected_recipe = name
-        result = await self._safe_call("launch_recipe", {"recipe_name": name})
-        self._log_line(f"[launch] {name}: {result}")
+        self._selected_recipe = slug
+        result = await self._safe_call("launch_recipe", {"recipe_name": slug})
+        self._log_line(f"[launch] {slug}: {result}")
+
+    async def on_data_table_row_selected(self, event: Any) -> None:
+        """DataTable consumes `enter`; route row-select into start_recipe."""
+        await self.action_start_recipe()
 
     async def action_stop_cluster(self) -> None:
         result = await self._safe_call("stop_cluster")
@@ -267,21 +281,23 @@ class SparkTui(App[None]):
         self._log_line(f"[restart] {result}")
 
     async def action_download_model(self) -> None:
-        name = self._current_recipe_name()
-        if not name:
+        slug = self._current_recipe_slug()
+        if not slug:
             return
-        recipe = await self._safe_call("get_recipe", {"name": name})
-        if recipe:
+        recipe = await self._safe_call("get_recipe", {"name": slug})
+        if isinstance(recipe, dict):
             hf_id = recipe.get("model")
             result = await self._safe_call("download_model", {"hf_id": hf_id})
             self._log_line(f"[download] {hf_id}: {result}")
+        else:
+            self._log_line(f"[download] get_recipe failed: {recipe}")
 
     async def action_delete_recipe(self) -> None:
-        name = self._current_recipe_name()
-        if not name:
+        slug = self._current_recipe_slug()
+        if not slug:
             return
-        result = await self._safe_call("delete_recipe", {"name": name})
-        self._log_line(f"[delete] {name}: {result}")
+        result = await self._safe_call("delete_recipe", {"name": slug})
+        self._log_line(f"[delete] {slug}: {result}")
         await self._refresh_recipes()
 
     def action_toggle_logs(self) -> None:

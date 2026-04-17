@@ -81,6 +81,7 @@ class RecipeStore:
             results.append(
                 RecipeSummary(
                     name=recipe.name,
+                    slug=p.stem,
                     description=recipe.description,
                     model=recipe.model,
                     supports_cluster=not recipe.solo_only,

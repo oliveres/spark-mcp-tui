@@ -151,9 +151,15 @@ class Recipe(BaseModel):
 
 
 class RecipeSummary(BaseModel):
-    """Lightweight recipe listing entry, returned by `list_recipes`."""
+    """Lightweight recipe listing entry, returned by `list_recipes`.
+
+    `name` is the free-form YAML `name:` field (may contain uppercase, dots,
+    spaces). `slug` is the filesystem-safe filename stem that every MCP tool
+    accepting a `name` argument actually expects.
+    """
 
     name: str
+    slug: str
     description: str
     model: str
     supports_cluster: bool

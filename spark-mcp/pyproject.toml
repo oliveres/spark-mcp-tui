@@ -1,0 +1,103 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "spark-mcp"
+version = "0.1.0"
+description = "MCP server for managing vLLM on DGX Spark clusters"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "The spark-mcp authors" }]
+keywords = ["mcp", "vllm", "dgx-spark", "llm", "cluster"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "mcp[cli]>=1.2.0",
+    "asyncssh>=2.18",
+    "pyyaml>=6.0.2",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "httpx>=0.28",
+    "prometheus-client>=0.21",
+    "rich>=13.9",
+    "uvicorn>=0.32",
+    "starlette>=0.40",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "coverage[toml]>=7.6",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "types-pyyaml>=6.0",
+]
+
+[project.scripts]
+spark-mcp = "spark_mcp.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/oliveres/spark-mcp-tui"
+Issues = "https://github.com/oliveres/spark-mcp-tui/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/spark_mcp"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/spark_mcp/templates" = "spark_mcp/templates"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "ASYNC", "S", "SIM", "RUF"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+mypy_path = ["src"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "integration: requires a real DGX Spark cluster (skipped by default)",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["src/spark_mcp"]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "pragma: no cover",
+]
+fail_under = 80

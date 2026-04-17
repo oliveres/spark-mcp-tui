@@ -254,13 +254,31 @@ def build_mcp(ctx: ServerContext, metrics: dict[str, Any] | None = None) -> Fast
     @mcp.tool()
     @_instrument(metrics, "list_recipes")
     async def list_recipes() -> list[RecipeSummary]:
-        """List every vLLM recipe available on this cluster."""
+        """List every vLLM recipe available on this cluster.
+
+        Populates `is_model_cached` from the local HuggingFace cache scan so
+        clients can distinguish recipes whose weights are already on disk.
+        """
         summaries = await ctx.recipes.list_recipes()
         state = await ctx.state.load()
-        active = state.active_model.recipe if state.active_model else None
+        active_slug = None
+        if state.active_model is not None:
+            from .recipes import _slugify
+
+            active_slug = _slugify(state.active_model.recipe)
+        # Local-cache scan only for now — worker-side cache requires an SSH
+        # round-trip we skip on the hot list-recipes path.
+        cached_ids: set[str] = set()
+        try:
+            cached_models = await ctx.operations.list_cached_models()
+            cached_ids = {m.hf_id for m in cached_models}
+        except Exception:
+            cached_models = []
         for s in summaries:
-            if s.name == active:
+            if active_slug is not None and s.slug == active_slug:
                 s.is_active = True
+            if s.model in cached_ids:
+                s.is_model_cached = {cfg.cluster.head_node: True}
         return summaries
 
     @mcp.tool()
@@ -343,7 +361,29 @@ def build_mcp(ctx: ServerContext, metrics: dict[str, Any] | None = None) -> Fast
             setup=setup,
             solo=solo,
         )
+        # Auto-detect missing container: upstream launch-cluster.sh runs with
+        # --rm so stop_cluster wipes the container. run-recipe.py then tries
+        # docker exec on a non-existent name and errors with "No such
+        # container". Pre-flight by peeking at docker ps on the head node;
+        # if our recipe's container name is not there, force setup=True so
+        # run-recipe.py recreates it.
+        if not args.setup:
+            try:
+                running = await ctx.operations.list_containers(cfg.cluster.head_node)
+            except Exception:
+                running = []
+            if cfg.vllm_docker.container_name not in running:
+                args.setup = True
         result = await ctx.vllm_docker.launch_recipe(args)
+        # Belt-and-braces: if the run still fails with the missing-container
+        # signature, retry once with setup=True.
+        if (
+            not result.success
+            and not setup
+            and "No such container" in (result.stdout + result.stderr)
+        ):
+            args.setup = True
+            result = await ctx.vllm_docker.launch_recipe(args)
         if result.success:
             state.active_model = ActiveModel(
                 recipe=recipe_name,

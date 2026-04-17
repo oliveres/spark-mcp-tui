@@ -157,9 +157,10 @@ class SparkTui(App[None]):
     async def on_mount(self) -> None:
         table = self.query_one("#recipes-row", DataTable)
         table.cursor_type = "row"
-        # 1-char status column followed by name + model.
-        # Status legend: ● active, ⬇ downloading, blank otherwise.
-        table.add_columns(" ", "name", "model")
+        # Two 1-char status columns followed by name + model:
+        #   col 1 ("st"):  lifecycle — ● active, ⬇ downloading, blank otherwise
+        #   col 2 ("c"):   cache     — ✓ if weights are in local HF hub, blank otherwise
+        table.add_columns("st", "c", "name", "model")
 
         # First call also acts as the connectivity probe; OfflineError is caught
         # inside _safe_call and schedules the backoff reconnect.
@@ -221,19 +222,19 @@ class SparkTui(App[None]):
         self._slugs_by_row.clear()
         downloading_hf_ids = set(self._active_downloads.values())
         for r in recipes:
-            # Status glyph per row:
-            #   ● active (running)
-            #   ⬇ downloading model referenced by this recipe
-            #   blank otherwise
+            # Lifecycle glyph: ● active / ⬇ downloading / blank.
             if r.get("is_active"):
                 status = "●"
             elif r.get("model") in downloading_hf_ids:
                 status = "⬇"
             else:
                 status = " "
+            # Cache glyph: ✓ when weights are in the local HF hub, else blank.
+            cached_map = r.get("is_model_cached") or {}
+            cached = "✓" if any(cached_map.values()) else " "
             slug = r.get("slug") or r["name"]
             self._slugs_by_row.append(slug)
-            table.add_row(status, r["name"], r["model"])
+            table.add_row(status, cached, r["name"], r["model"])
 
     async def _refresh_logs(self) -> None:
         if self._offline or not self._selected_recipe:

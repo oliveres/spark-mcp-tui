@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-04-17
+
+### Fixed
+
+- **`launch_recipe` now auto-recreates the container.** Upstream
+  `launch-cluster.sh` runs the vllm_node container with `--rm`, so
+  `stop_cluster` (which calls `docker stop`) removes it entirely. The
+  next `launch_recipe` would then fail silently with
+  `Error response from daemon: No such container: vllm_node` because
+  `run-recipe.py -d` was trying `docker exec` on a missing name.
+  The server now peeks at `docker ps` on the head before launch; if
+  the recipe's container isn't there it forces `setup=True` so
+  `run-recipe.py` recreates it. A belt-and-braces retry catches any
+  residual "No such container" error.
+
+### Added
+
+- **`list_recipes` populates `is_model_cached`.** Each `RecipeSummary`
+  now reports whether its HuggingFace model is in the local hub
+  cache. The TUI renders this as a second 1-char status column:
+  `✓` = cached on localhost, blank otherwise. (Worker-side scan is
+  still on the TODO list; this is fast-path local only.)
+- **TUI recipe table: two status columns.** Lifecycle column
+  (`●`/`⬇`/blank) kept; new cache column (`✓`/blank) added.
+  Column headers `st` / `c` / `name` / `model`.
+
 ## [0.2.0] - 2026-04-17
 
 ### Added

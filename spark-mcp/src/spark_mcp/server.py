@@ -187,9 +187,7 @@ def _instrument(
             try:
                 return await fn(*args, **kwargs)
             finally:
-                metrics["tool_duration"].labels(tool=name).observe(
-                    _time.perf_counter() - start
-                )
+                metrics["tool_duration"].labels(tool=name).observe(_time.perf_counter() - start)
 
         return wrapper
 
@@ -543,9 +541,7 @@ def build_mcp(ctx: ServerContext, metrics: dict[str, Any] | None = None) -> Fast
             *[ctx.cluster.run(n, ["true"], timeout=3.0) for n in cfg.cluster.workers],
             return_exceptions=True,
         )
-        ssh_ok = all(
-            not isinstance(r, BaseException) and r.exit_code == 0 for r in ssh_results
-        )
+        ssh_ok = all(not isinstance(r, BaseException) and r.exit_code == 0 for r in ssh_results)
         return HealthStatus(
             ok=repo_ok and ssh_ok,
             details={"repo_path_exists": repo_ok, "ssh_ok": ssh_ok},
@@ -680,9 +676,7 @@ async def build_http_app(
             await ctx.aclose()
 
     middleware = [
-        Middleware(
-            RateLimitMiddleware, requests_per_minute=cfg.server.rate_limit_per_minute
-        ),
+        Middleware(RateLimitMiddleware, requests_per_minute=cfg.server.rate_limit_per_minute),
         Middleware(
             CORSMiddleware,
             allow_origins=cfg.server.cors_allow_origins,
@@ -720,9 +714,7 @@ async def serve(cfg: AppConfig) -> None:
         return
 
     if cfg.server.log_level == "DEBUG":
-        log.warning(
-            "log_level=DEBUG may leak Authorization headers; prefer INFO in production."
-        )
+        log.warning("log_level=DEBUG may leak Authorization headers; prefer INFO in production.")
     app, _, _ = await build_http_app(cfg)
     uv_cfg = uvicorn.Config(
         app,

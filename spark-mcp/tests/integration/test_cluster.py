@@ -38,6 +38,7 @@ async def _call_tool(
         for block in result.content:
             if getattr(block, "type", None) == "text":
                 import json
+
                 text = getattr(block, "text", "")
                 try:
                     return json.loads(text)
@@ -46,9 +47,7 @@ async def _call_tool(
         return None
 
 
-async def test_health_and_list_recipes(
-    integration_host: str, integration_token: str
-) -> None:
+async def test_health_and_list_recipes(integration_host: str, integration_token: str) -> None:
     health = await _call_tool(integration_host, integration_token, "health_check")
     assert health.get("ok") is True
 

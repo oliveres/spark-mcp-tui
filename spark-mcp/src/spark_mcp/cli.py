@@ -164,9 +164,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command")
 
-    init_p = sub.add_parser(
-        "init", help="First-time setup: create config + env + systemd template"
-    )
+    init_p = sub.add_parser("init", help="First-time setup: create config + env + systemd template")
     init_p.add_argument(
         "--print-token",
         action="store_true",

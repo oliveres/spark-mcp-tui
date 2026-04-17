@@ -1,0 +1,128 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  spark-mcp:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Install spark-mcp
+        working-directory: spark-mcp
+        env:
+          PY: ${{ matrix.python-version }}
+        run: |
+          uv venv --python "$PY"
+          source .venv/bin/activate
+          uv pip install -e ".[dev]"
+      - name: Lint
+        working-directory: spark-mcp
+        run: |
+          source .venv/bin/activate
+          ruff check src tests
+          ruff format --check src tests
+      - name: Type-check
+        working-directory: spark-mcp
+        run: |
+          source .venv/bin/activate
+          mypy src
+      - name: Unit tests (coverage gate 80%)
+        working-directory: spark-mcp
+        run: |
+          source .venv/bin/activate
+          pytest --cov=spark_mcp --cov-report=xml --cov-fail-under=80
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: spark-mcp/coverage.xml
+          flags: spark-mcp
+        continue-on-error: true
+
+  spark-tui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Install spark-tui
+        working-directory: spark-tui
+        run: |
+          uv venv --python 3.12
+          source .venv/bin/activate
+          uv pip install -e ".[dev]"
+      - name: Lint
+        working-directory: spark-tui
+        run: |
+          source .venv/bin/activate
+          ruff check src
+          ruff format --check src
+      - name: Type-check
+        working-directory: spark-tui
+        run: |
+          source .venv/bin/activate
+          mypy src
+
+  skill-yaml-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install spark-mcp
+        working-directory: spark-mcp
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv venv --python 3.12
+          source .venv/bin/activate
+          uv pip install -e .
+      - name: Validate every recipe template + example
+        working-directory: spark-mcp
+        run: |
+          source .venv/bin/activate
+          python - <<'PY'
+          import asyncio
+          from pathlib import Path
+          from spark_mcp.recipes import RecipeStore
+
+          async def check() -> None:
+              store = RecipeStore(Path("/tmp"))
+              base = Path("../spark-skills/skills/creating-vllm-recipes")
+              bad = []
+              for subdir in ("templates", "examples"):
+                  for p in sorted((base / subdir).glob("*.yaml")):
+                      result = await store.validate_text(p.read_text())
+                      if not result.valid:
+                          bad.append((p, result.errors))
+              if bad:
+                  for p, errs in bad:
+                      print(f"FAIL {p}: {errs}")
+                  raise SystemExit(1)
+              print("All recipe YAMLs validate.")
+
+          asyncio.run(check())
+          PY
+
+  examples-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure examples/config.toml matches packaged template (A27)
+        run: diff spark-mcp/src/spark_mcp/templates/config.toml examples/config.toml

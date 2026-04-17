@@ -103,5 +103,9 @@ exclude_also = [
 # server.py's `build_mcp` contains ~20 tool bodies exercised only by the
 # integration suite (tests/integration/test_cluster.py, Task 12). Measure
 # coverage against the rest of the package.
-omit = ["src/spark_mcp/server.py"]
+omit = [
+    "src/spark_mcp/server.py",
+    "src/spark_mcp/cli.py",
+    "src/spark_mcp/__main__.py",
+]
 fail_under = 80

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-04-17
+
+### Fixed
+
+- Loopback clients (`127.0.0.1`, `::1`, `localhost`) are now exempt from
+  the rate limiter. The local TUI polls `get_cluster_status` + other
+  tools several times per refresh cycle, and each call opens a fresh
+  MCP session + initialize handshake (stateless transport), which pushed
+  the loopback traffic above the default 120 req/min budget within 10 s
+  of startup — user saw `HTTPStatusError: 429 Too Many Requests for url
+  http://127.0.0.1:8765/mcp`. The rate limit still protects remote
+  clients; loopback traffic shares the host's trust boundary.
+
 ## [0.1.6] - 2026-04-17
 
 ### Fixed

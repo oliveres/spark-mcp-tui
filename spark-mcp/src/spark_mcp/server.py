@@ -621,8 +621,16 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+_LOOPBACK_IPS: frozenset[str] = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Simple per-IP token bucket; evicts oldest entries when over cap."""
+    """Simple per-IP token bucket; evicts oldest entries when over cap.
+
+    Loopback clients (127.0.0.1, ::1, localhost) are exempt — they share the
+    host's trust boundary with the server, so the rate limit exists to protect
+    against *remote* attackers, not the operator's own TUI / scripts.
+    """
 
     _MAX_ENTRIES = 10_000
 
@@ -637,6 +645,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if self._limit <= 0:
             return await call_next(request)
         ip = request.client.host if request.client else "unknown"
+        if ip in _LOOPBACK_IPS:
+            return await call_next(request)
         now = _time.monotonic()
         window, count = self._buckets.get(ip, (now, 0))
         if now - window > 60:

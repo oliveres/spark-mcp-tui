@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import logging
 import secrets as _secrets
 import time as _time
@@ -184,12 +185,18 @@ class ServerContext:
 def _instrument(
     metrics: dict[str, Any] | None, name: str
 ) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
-    """Decorator: bumps tool-call counter and observes duration when metrics is set."""
+    """Decorator: bumps tool-call counter and observes duration when metrics is set.
+
+    Uses functools.wraps so FastMCP reads the wrapped function's __name__ /
+    __doc__ / signature — not "wrapper". Previous versions silently registered
+    every tool as "wrapper", making only the last-decorated tool reachable.
+    """
 
     def decorator(fn: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
         if metrics is None:
             return fn
 
+        @functools.wraps(fn)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             metrics["tool_calls"].labels(tool=name).inc()
             start = _time.perf_counter()

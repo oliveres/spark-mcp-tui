@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.3] - 2026-04-17
+## [0.1.4] - 2026-04-17
+
+### Fixed
+
+- **Every MCP tool except the last one was unreachable when HTTP metrics
+  were enabled** (i.e. in every production HTTP deployment). The
+  `_instrument` decorator in `server.py` lacked `functools.wraps`, so
+  FastMCP registered every `@mcp.tool()` function under the name
+  `"wrapper"` — the later registration overwrote the earlier one, and
+  clients calling e.g. `get_cluster_info` received `Unknown tool:
+  get_cluster_info`. Applied `@functools.wraps(fn)` to the decorator.
+- Added `tests/unit/test_server_tools.py` that builds the FastMCP app
+  with metrics enabled and asserts every PRD-listed tool is registered
+  under its real name. This test would have caught the bug.
 
 ### Fixed
 

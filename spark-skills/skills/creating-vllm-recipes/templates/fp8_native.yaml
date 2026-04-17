@@ -1,0 +1,19 @@
+recipe_version: "1"
+name: fp8-native
+description: FP8-native model template (Hopper/GB10 default)
+model: REPLACE_ME/REPLACE_ME-FP8
+cluster_only: false
+solo_only: false
+container: vllm-node-tf5
+build_args: ["--tf5"]
+mods: []
+defaults:
+  port: 8000
+  host: 0.0.0.0
+  tensor_parallel: 2
+  gpu_memory_utilization: 0.85
+  max_model_len: 65536
+command: |
+  vllm serve REPLACE_ME/REPLACE_ME-FP8 \
+    --tensor-parallel-size {tensor_parallel} \
+    --gpu-memory-utilization {gpu_memory_utilization}

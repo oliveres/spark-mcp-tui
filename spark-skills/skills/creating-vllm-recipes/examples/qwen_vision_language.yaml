@@ -1,0 +1,21 @@
+recipe_version: "1"
+name: qwen3-vl-235b
+description: Qwen3-VL-235B multimodal vision-language model
+model: Qwen/Qwen3-VL-235B-Instruct-AWQ
+cluster_only: true
+solo_only: false
+container: vllm-node-tf5
+build_args: ["--tf5", "--mxfp4"]
+mods: []
+defaults:
+  port: 8000
+  host: 0.0.0.0
+  tensor_parallel: 4
+  gpu_memory_utilization: 0.85
+  max_model_len: 65536
+command: |
+  vllm serve Qwen/Qwen3-VL-235B-Instruct-AWQ \
+    --tensor-parallel-size {tensor_parallel} \
+    --gpu-memory-utilization {gpu_memory_utilization} \
+    --limit-mm-per-prompt image=4 \
+    --quantization awq

@@ -1,0 +1,20 @@
+recipe_version: "1"
+name: cluster-tp4
+description: Four-node cluster template, tensor_parallel=4
+model: REPLACE_ME/REPLACE_ME
+cluster_only: true
+solo_only: false
+container: vllm-node-tf5
+build_args: ["--tf5"]
+mods: []
+defaults:
+  port: 8000
+  host: 0.0.0.0
+  tensor_parallel: 4
+  gpu_memory_utilization: 0.85
+  max_model_len: 131072
+command: |
+  vllm serve REPLACE_ME/REPLACE_ME \
+    --tensor-parallel-size {tensor_parallel} \
+    --max-model-len {max_model_len} \
+    --gpu-memory-utilization {gpu_memory_utilization}

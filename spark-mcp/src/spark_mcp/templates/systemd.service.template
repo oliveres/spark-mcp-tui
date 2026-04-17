@@ -1,0 +1,16 @@
+[Unit]
+Description=spark-mcp MCP server
+After=network.target docker.service
+
+[Service]
+Type=simple
+User={user}
+Group={user}
+WorkingDirectory={working_dir}
+ExecStart={exec_path}
+EnvironmentFile={env_file}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

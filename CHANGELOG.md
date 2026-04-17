@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-04-17
+
+### Fixed
+
+- `POST /mcp` (no trailing slash) no longer returns `307 Temporary
+  Redirect` to `/mcp/`. Some MCP clients (Claude Code) strip the
+  `Authorization` header across redirects for security, so the
+  follow-up request arrived unauthenticated and the connection
+  silently failed. Both `/mcp` and `/mcp/` are now mounted at the
+  same ASGI handler.
+
 ## [0.1.11] - 2026-04-17
 
 ### Fixed

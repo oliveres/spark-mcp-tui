@@ -718,7 +718,12 @@ async def build_http_app(
             protect_metrics=(cfg.server.metrics_auth == "bearer"),
         ),
     ]
+    # Mount both "/mcp" and "/mcp/" at the same ASGI app. Without this,
+    # Starlette issues a 307 redirect from /mcp -> /mcp/, and some MCP
+    # clients (Claude Code) strip the Authorization header across redirects
+    # for security, so the follow-up request arrives unauthenticated.
     routes: list[Any] = [
+        Mount("/mcp/", app=mcp_app),
         Mount("/mcp", app=mcp_app),
         Route("/health", health_endpoint, methods=["GET"]),
     ]

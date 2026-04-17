@@ -1,15 +1,17 @@
-"""Async MCP client wrapper (A5 iteration-2 fix).
+"""Async MCP client wrapper.
 
-Uses the official SDK's `ClientSession` + `streamablehttp_client` so the TUI
-speaks the exact same protocol as Claude Code. Structured tool results are
-returned via `structuredContent`; if absent, the first text content block is
-parsed as JSON.
+Opens a fresh `ClientSession` per call (stateless transport on the server side
+makes this cheap and avoids anyio task-scope mismatches that happen when an
+`AsyncExitStack` is entered from one asyncio task and closed from another —
+which is what Textual does between `on_mount` and `on_unmount`).
+
+Returns `result.structuredContent` when present; otherwise parses the first
+text content block as JSON.
 """
 
 from __future__ import annotations
 
 import json
-from contextlib import AsyncExitStack
 from typing import Any
 
 import httpx
@@ -26,24 +28,25 @@ class McpClient:
         self._url = url
         self._headers = {"Authorization": f"Bearer {token}"}
         self._timeout_s = timeout_s
-        self._session: ClientSession | None = None
-        self._stack: AsyncExitStack | None = None
 
     async def connect(self) -> None:
-        self._stack = AsyncExitStack()
-        read, write, _close = await self._stack.enter_async_context(
-            streamablehttp_client(self._url, headers=self._headers, timeout=self._timeout_s)
-        )
-        self._session = await self._stack.enter_async_context(ClientSession(read, write))
-        await self._session.initialize()
+        """No-op; sessions are opened per-call."""
+        return None
 
     async def call(self, tool: str, arguments: dict[str, Any] | None = None) -> Any:
-        if self._session is None:
-            raise OfflineError("Client not connected")
         try:
-            result = await self._session.call_tool(tool, arguments or {})
+            async with (
+                streamablehttp_client(
+                    self._url, headers=self._headers, timeout=self._timeout_s
+                ) as (read, write, _close),
+                ClientSession(read, write) as session,
+            ):
+                await session.initialize()
+                result = await session.call_tool(tool, arguments or {})
         except (httpx.RequestError, httpx.HTTPStatusError, ConnectionError) as exc:
             raise OfflineError(str(exc)) from exc
+        except Exception as exc:
+            raise OfflineError(f"MCP call failed: {exc}") from exc
         if getattr(result, "structuredContent", None) is not None:
             return result.structuredContent
         for block in getattr(result, "content", []):
@@ -56,7 +59,5 @@ class McpClient:
         return None
 
     async def aclose(self) -> None:
-        if self._stack is not None:
-            await self._stack.aclose()
-            self._stack = None
-            self._session = None
+        """No persistent resources; each call is self-contained."""
+        return None

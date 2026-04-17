@@ -146,14 +146,9 @@ class SparkTui(App[None]):
         table = self.query_one("#recipes-row", DataTable)
         table.cursor_type = "row"
         table.add_columns("", "name", "model", "actions")
-        try:
-            await self._client.connect()
-        except OfflineError as exc:
-            self._offline = True
-            self._log_line(f"[offline] could not connect: {exc}")
-            self.set_timer(2.0, self._schedule_reconnect)
-            return
 
+        # First call also acts as the connectivity probe; OfflineError is caught
+        # inside _safe_call and schedules the backoff reconnect.
         await self._populate_nodes()
         await self._refresh_status()
         await self._refresh_recipes()
@@ -161,7 +156,8 @@ class SparkTui(App[None]):
         self.set_interval(5.0, self._refresh_logs)
 
     async def on_unmount(self) -> None:
-        await self._client.aclose()
+        # Per-call client holds no persistent resources; nothing to close.
+        return None
 
     def _log_line(self, line: str) -> None:
         logs = self.query_one("#logs-row", Log)
@@ -229,9 +225,9 @@ class SparkTui(App[None]):
         async def _reconnect(delay: float = 2.0) -> None:
             while self._offline and delay <= 30.0:
                 await asyncio.sleep(delay)
+                # Per-call client: a successful health_check is the probe.
                 try:
-                    await self._client.aclose()
-                    await self._client.connect()
+                    await self._client.call("health_check")
                     self._offline = False
                     self._log_line("[online] reconnected")
                     await self._refresh_status()

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-04-17
+
+### Fixed
+
+- `spark-tui` crashed on startup with `RuntimeError: Attempted to exit
+  cancel scope in a different task than it was entered in`. Cause: the
+  previous `McpClient.connect`/`aclose` split used an `AsyncExitStack`
+  spanning two asyncio tasks (Textual dispatches `on_mount` and
+  `on_unmount` on separate tasks). Fix: the MCP client now opens a
+  fresh `ClientSession` per call — the server is already `stateless_http=True`
+  so there is no handshake overhead beyond the initial `initialize`.
+  The client's `connect()` and `aclose()` are now no-ops kept for API
+  compatibility.
+- The TUI reconnect loop now probes connectivity with `health_check`
+  instead of re-entering/re-closing a persistent session.
+
 ## [0.1.2] - 2026-04-17
 
 ### Changed

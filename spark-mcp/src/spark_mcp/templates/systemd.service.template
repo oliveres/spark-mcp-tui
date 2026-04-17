@@ -9,6 +9,10 @@ Group={user}
 WorkingDirectory={working_dir}
 ExecStart={exec_path}
 EnvironmentFile={env_file}
+# hf-download.sh and other vllm-docker scripts need user-local tools
+# (uvx, uv, docker from rootless install) which live in ~/.local/bin.
+# systemd's default PATH does not include that dir.
+Environment="PATH={working_dir}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Restart=on-failure
 RestartSec=5s
 

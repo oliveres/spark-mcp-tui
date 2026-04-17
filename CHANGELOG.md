@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-04-17
+
+### Fixed
+
+- systemd service template now exports `PATH={HOME}/.local/bin:...`
+  so `hf-download.sh` (and other upstream vllm-docker scripts that
+  invoke `uvx`, `uv`, `docker`, etc.) can find user-local tools.
+  Previously downloads failed silently when spark-mcp ran under
+  systemd because `uvx` was only in the interactive-shell PATH.
+  **Operators upgrading an existing install should re-run
+  `spark-mcp init` (backs off if config files exist) to regenerate
+  the unit, or manually add the `Environment=PATH=...` line to
+  `/etc/systemd/system/spark-mcp.service` and `systemctl
+  daemon-reload && systemctl restart spark-mcp`.**
+
 ## [0.1.10] - 2026-04-17
 
 ### Fixed

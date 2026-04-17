@@ -15,6 +15,8 @@ Security notes (amendments):
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import re as _re
 import uuid
 from asyncio import create_subprocess_exec as _spawn_subprocess
 from datetime import UTC, datetime
@@ -33,6 +35,78 @@ from .models import (
     StopResult,
 )
 from .operations import Operations
+
+# hf-download.sh / uvx progress lines look like:
+#   "Downloading (incomplete total...):   1%|▉     | 141M/24.3G [00:08<11:57, 33.7MB/s]"
+# or huggingface_hub's:
+#   "Fetching 52 files:  12%|...| 6/52 [00:04<00:35,  1.31it/s]"
+_PROGRESS_LINE_RE = _re.compile(r"(\d+(?:\.\d+)?)%\|")
+_SIZE_PAIR_RE = _re.compile(r"\|\s*([\d.]+[KMGT]?)/([\d.]+[KMGT]?)\s")
+_SIZE_UNITS: dict[str, int] = {"": 1, "K": 1024, "M": 1024**2, "G": 1024**3, "T": 1024**4}
+
+
+def _parse_size(token: str) -> int:
+    if not token:
+        return 0
+    unit = ""
+    if token[-1].isalpha() and token[-1].upper() in _SIZE_UNITS:
+        unit = token[-1].upper()
+        token = token[:-1]
+    try:
+        return int(float(token) * _SIZE_UNITS[unit])
+    except (ValueError, KeyError):
+        return 0
+
+
+class ProgressTracker:
+    """Continuously drains a subprocess's stderr, remembering the last
+    non-blank line + any parsed percentage / byte counts.
+
+    hf-download.sh (via uvx + huggingface_hub) prints tqdm-style progress
+    bars to stderr. We read line-buffered (but handle \r-separated updates
+    too) and expose the last seen state for `get_download_progress`.
+    """
+
+    def __init__(self, proc: asyncio.subprocess.Process) -> None:
+        self._proc = proc
+        self.last_line: str = ""
+        self.percent: float | None = None
+        self.bytes_done: int = 0
+        self.bytes_total: int = 0
+        self._task = asyncio.create_task(self._drain())
+
+    async def _drain(self) -> None:  # pragma: no cover
+        if self._proc.stderr is None:
+            return
+        buffer = b""
+        while True:
+            chunk = await self._proc.stderr.read(1024)
+            if not chunk:
+                break
+            buffer += chunk
+            # tqdm uses \r to overwrite the same line; treat both \n and \r as terminators.
+            parts = _re.split(rb"[\r\n]", buffer)
+            buffer = parts.pop()  # last incomplete piece
+            for raw in parts:
+                line = raw.decode(errors="replace").strip()
+                if not line:
+                    continue
+                self._update(line)
+
+    def _update(self, line: str) -> None:
+        self.last_line = line[:200]
+        m = _PROGRESS_LINE_RE.search(line)
+        if m:
+            with contextlib.suppress(ValueError):
+                self.percent = float(m.group(1))
+        m2 = _SIZE_PAIR_RE.search(line)
+        if m2:
+            self.bytes_done = _parse_size(m2.group(1))
+            self.bytes_total = _parse_size(m2.group(2))
+
+    def cancel(self) -> None:
+        self._task.cancel()
+
 
 OVERRIDE_FLAG_MAP: dict[str, str] = {
     "port": "--port",
@@ -194,13 +268,16 @@ class VllmDocker:
 
     async def start_download(
         self, hf_id: str, interconnect_ip: str | None
-    ) -> tuple[DownloadResult, asyncio.subprocess.Process]:  # pragma: no cover
-        """Spawn hf-download.sh as an async subprocess; caller tracks the handle.
+    ) -> tuple[DownloadResult, asyncio.subprocess.Process, ProgressTracker]:  # pragma: no cover
+        """Spawn hf-download.sh as an async subprocess + attach a progress tracker.
 
         Detects immediate failures (script missing, non-executable, exits
         within the first 500 ms) and surfaces them as a RuntimeError with
-        the captured stderr — so the caller sees the real reason instead of
-        a silent 'started_at' success that never produces traffic.
+        the captured stderr.
+
+        The returned ProgressTracker drains stderr continuously so later calls
+        to `get_download_progress` can report the latest `hf-download.sh`
+        progress line (percentage + bytes transferred).
         """
         import os as _os
 
@@ -234,6 +311,7 @@ class VllmDocker:
                 f"hf-download.sh exited immediately with code {proc.returncode}: "
                 f"{stderr.decode(errors='replace')[-1000:]}"
             )
+        tracker = ProgressTracker(proc)
         return (
             DownloadResult(
                 download_id=str(uuid.uuid4()),
@@ -241,6 +319,7 @@ class VllmDocker:
                 started_at=datetime.now(tz=UTC),
             ),
             proc,
+            tracker,
         )
 
     @staticmethod

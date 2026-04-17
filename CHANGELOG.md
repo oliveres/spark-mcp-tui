@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-17
+
+### Added
+
+- **spark-tui: side-by-side layout.** Recipes table (40% width) and log
+  panel (60%) now sit next to each other under the node-status row
+  instead of stacking vertically. The log panel gets the space it
+  deserves; long log lines stop wrapping off-screen.
+- **spark-tui: `l` cycles pane visibility.** `l` now rotates through:
+  both panes visible (default) -> logs full-width -> recipes full-width
+  -> back to both. Useful when tailing a launch.
+- **Download progress telemetry.** `hf-download.sh` writes tqdm progress
+  bars to stderr; the server now drains that stream in a background
+  task (`ProgressTracker` in `vllm_docker.py`) and parses the last
+  progress line for percentage + byte counts.
+  `get_download_progress` returns `percent`, `progress_text`, and
+  `bytes_transferred` (previously hard-coded to 0). The TUI polls every
+  3 s while downloads are active and logs
+  `[download] <hf_id>: 42.3% (5.2 GB)` lines.
+- **Recipes table status column.** Replaced the empty "actions" column
+  with a one-char status glyph: `●` active, `⬇` downloading,
+  blank otherwise. Drops the now-unused `[RUN]` text cell.
+- **`wait_ready` MCP tool finally registered.** Was present in
+  `VllmDocker.wait_ready` but never decorated with `@mcp.tool()`, so
+  clients couldn't call it. Added to `build_mcp` + the regression test
+  in `test_server_tools.py`.
+
+### Fixed
+
+- `ServerContext._downloads` now stores a 3-tuple (record, process,
+  tracker). `cancel_download` cancels the stderr drain task so the
+  background coroutine doesn't leak after a cancellation.
+
 ## [0.1.13] - 2026-04-17
 
 ### Fixed

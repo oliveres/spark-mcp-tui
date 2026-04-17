@@ -323,4 +323,6 @@ class DownloadProgress(BaseModel):
     download_id: str
     status: Literal["queued", "in_progress", "completed", "failed", "cancelled"]
     bytes_transferred: int
+    percent: float | None = None
+    progress_text: str | None = None
     error: str | None = None

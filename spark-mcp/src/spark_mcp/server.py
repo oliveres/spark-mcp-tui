@@ -62,6 +62,7 @@ from .models import (
     LaunchResult,
     NodeStatus,
     OperationResult,
+    ReadyResult,
     Recipe,
     RecipeSummary,
     RestartResult,
@@ -70,7 +71,7 @@ from .models import (
 )
 from .operations import Operations
 from .recipes import RecipeStore, validate_recipe_name
-from .vllm_docker import VllmDocker
+from .vllm_docker import ProgressTracker, VllmDocker
 
 log = logging.getLogger(__name__)
 
@@ -134,9 +135,9 @@ class ServerContext:
     vllm_docker: VllmDocker
     state: StateStore
     http: httpx.AsyncClient
-    _downloads: dict[str, tuple[DownloadRecord, asyncio.subprocess.Process]] = field(
-        default_factory=dict
-    )
+    _downloads: dict[
+        str, tuple[DownloadRecord, asyncio.subprocess.Process, ProgressTracker]
+    ] = field(default_factory=dict)
 
     @classmethod
     async def create(cls, cfg: AppConfig) -> ServerContext:
@@ -381,6 +382,14 @@ def build_mcp(ctx: ServerContext, metrics: dict[str, Any] | None = None) -> Fast
         launched = await ctx.vllm_docker.launch_recipe(LaunchArgs(**state.last_launch_args))
         return RestartResult(success=launched.success, stopped=stopped, launched=launched)
 
+    @mcp.tool()
+    @_instrument(metrics, "wait_ready")
+    async def wait_ready(recipe_name: str, timeout_s: int = 120) -> ReadyResult:
+        """Poll vLLM's /health endpoint until 200 OK or timeout."""
+        validate_recipe_name(recipe_name)
+        recipe = await ctx.recipes.load_recipe(recipe_name)
+        return await ctx.vllm_docker.wait_ready(recipe.defaults.port, timeout_s)
+
     # ---- Monitoring ----
 
     @mcp.tool()
@@ -445,23 +454,22 @@ def build_mcp(ctx: ServerContext, metrics: dict[str, Any] | None = None) -> Fast
     async def download_model(hf_id: str, distribute_to_workers: bool = True) -> DownloadResult:
         """Start an hf-download.sh download in the background."""
         # Gate on max_concurrent_downloads
-        active = sum(1 for d, _ in ctx._downloads.values() if d.status == "in_progress")
+        active = sum(1 for d, _p, _t in ctx._downloads.values() if d.status == "in_progress")
         if active >= cfg.limits.max_concurrent_downloads:
             raise RuntimeError(
                 f"max_concurrent_downloads={cfg.limits.max_concurrent_downloads} reached"
             )
         interconnect = cfg.cluster.interconnect_ip if distribute_to_workers else None
-        # start_download now raises with a clear message if hf-download.sh is
-        # missing / non-executable / exits within 500 ms. We propagate that
-        # as the MCP tool error so the TUI/Claude sees the real failure.
-        result, proc = await ctx.vllm_docker.start_download(hf_id, interconnect or None)
+        # start_download raises with a clear message if hf-download.sh is
+        # missing / non-executable / exits within 500 ms. Propagate as MCP error.
+        result, proc, tracker = await ctx.vllm_docker.start_download(hf_id, interconnect or None)
         record = DownloadRecord(
             download_id=result.download_id,
             hf_id=hf_id,
             status="in_progress",
             started_at=result.started_at,
         )
-        ctx._downloads[result.download_id] = (record, proc)
+        ctx._downloads[result.download_id] = (record, proc, tracker)
         state = await ctx.state.load()
         state.downloads[result.download_id] = record
         await ctx.state.save(state)
@@ -470,7 +478,7 @@ def build_mcp(ctx: ServerContext, metrics: dict[str, Any] | None = None) -> Fast
     @mcp.tool()
     @_instrument(metrics, "get_download_progress")
     async def get_download_progress(download_id: str) -> DownloadProgress:
-        """Report status of a running download."""
+        """Report status of a running download, including parsed percentage + bytes."""
         if download_id not in ctx._downloads:
             return DownloadProgress(
                 download_id=download_id,
@@ -478,10 +486,14 @@ def build_mcp(ctx: ServerContext, metrics: dict[str, Any] | None = None) -> Fast
                 bytes_transferred=0,
                 error="not found",
             )
-        record, proc = ctx._downloads[download_id]
+        record, proc, tracker = ctx._downloads[download_id]
         if proc.returncode is None:
             return DownloadProgress(
-                download_id=download_id, status="in_progress", bytes_transferred=0
+                download_id=download_id,
+                status="in_progress",
+                bytes_transferred=tracker.bytes_done,
+                percent=tracker.percent,
+                progress_text=tracker.last_line or None,
             )
         record.status = "completed" if proc.returncode == 0 else "failed"
         state = await ctx.state.load()
@@ -490,7 +502,9 @@ def build_mcp(ctx: ServerContext, metrics: dict[str, Any] | None = None) -> Fast
         return DownloadProgress(
             download_id=download_id,
             status=record.status,
-            bytes_transferred=0,
+            bytes_transferred=tracker.bytes_done,
+            percent=tracker.percent,
+            progress_text=tracker.last_line or None,
             error=None if record.status == "completed" else f"exit {proc.returncode}",
         )
 
@@ -503,7 +517,7 @@ def build_mcp(ctx: ServerContext, metrics: dict[str, Any] | None = None) -> Fast
                 success=False,
                 error=ErrorInfo(code="DOWNLOAD_NOT_FOUND", message="Unknown download id"),
             )
-        record, proc = ctx._downloads[download_id]
+        record, proc, tracker = ctx._downloads[download_id]
         if proc.returncode is not None:
             return OperationResult(
                 success=True, data={"download_id": download_id, "status": "already_complete"}
@@ -514,6 +528,7 @@ def build_mcp(ctx: ServerContext, metrics: dict[str, Any] | None = None) -> Fast
         except TimeoutError:
             proc.kill()
             await proc.wait()
+        tracker.cancel()
         record.status = "cancelled"
         state = await ctx.state.load()
         state.downloads[download_id] = record

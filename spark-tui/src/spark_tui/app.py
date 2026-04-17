@@ -95,10 +95,12 @@ class SparkTui(App[None]):
     CSS = """
     Screen { layout: vertical; }
     #status-row { height: 8; }
-    #recipes-row { height: 1fr; }
-    #logs-row { height: 12; }
+    #main-row { height: 1fr; }
+    #recipes-row { width: 2fr; border: tall $primary-darken-2; }
+    #logs-row { width: 3fr; border: tall $primary-darken-2; }
+    #recipes-row.hidden { display: none; }
+    #logs-row.hidden { display: none; }
     NodeBox { border: tall $primary; padding: 0 1; width: 1fr; }
-    Log { border: tall $primary-darken-2; }
     """
 
     BINDINGS: ClassVar[list[Any]] = [
@@ -134,21 +136,30 @@ class SparkTui(App[None]):
         self._offline = False
         self._selected_recipe: str | None = None
         self._slugs_by_row: list[str] = []
+        # download_id -> hf_id that is still in progress, for status column + log polling.
+        self._active_downloads: dict[str, str] = {}
+        # Rotates recipes/logs visibility via `l`: both -> logs only -> recipes only -> both.
+        self._pane_mode: int = 0
         self.theme = _resolve_theme(tui_cfg.ui.theme)
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         yield Vertical(
             Horizontal(id="status-row"),
-            DataTable(id="recipes-row"),
-            Log(id="logs-row", auto_scroll=True),
+            Horizontal(
+                DataTable(id="recipes-row"),
+                Log(id="logs-row", auto_scroll=True),
+                id="main-row",
+            ),
         )
         yield Footer()
 
     async def on_mount(self) -> None:
         table = self.query_one("#recipes-row", DataTable)
         table.cursor_type = "row"
-        table.add_columns("", "name", "model", "actions")
+        # 1-char status column followed by name + model.
+        # Status legend: ● active, ⬇ downloading, blank otherwise.
+        table.add_columns(" ", "name", "model")
 
         # First call also acts as the connectivity probe; OfflineError is caught
         # inside _safe_call and schedules the backoff reconnect.
@@ -157,6 +168,7 @@ class SparkTui(App[None]):
         await self._refresh_recipes()
         self.set_interval(self._tui_cfg.ui.refresh_interval_ms / 1000, self._refresh_status)
         self.set_interval(5.0, self._refresh_logs)
+        self.set_interval(3.0, self._poll_downloads)
 
     async def on_unmount(self) -> None:
         # Per-call client holds no persistent resources; nothing to close.
@@ -207,14 +219,21 @@ class SparkTui(App[None]):
         table = self.query_one("#recipes-row", DataTable)
         table.clear()
         self._slugs_by_row.clear()
+        downloading_hf_ids = set(self._active_downloads.values())
         for r in recipes:
-            status = "*" if r.get("is_active") else " "
-            # Display name (YAML name:) in the visible column; slug (filename
-            # stem) remembered in parallel for MCP tool calls that require the
-            # strict filesystem-safe name.
+            # Status glyph per row:
+            #   ● active (running)
+            #   ⬇ downloading model referenced by this recipe
+            #   blank otherwise
+            if r.get("is_active"):
+                status = "●"
+            elif r.get("model") in downloading_hf_ids:
+                status = "⬇"
+            else:
+                status = " "
             slug = r.get("slug") or r["name"]
             self._slugs_by_row.append(slug)
-            table.add_row(status, r["name"], r["model"], "[RUN]" if r.get("is_active") else "")
+            table.add_row(status, r["name"], r["model"])
 
     async def _refresh_logs(self) -> None:
         if self._offline or not self._selected_recipe:
@@ -285,12 +304,50 @@ class SparkTui(App[None]):
         if not slug:
             return
         recipe = await self._safe_call("get_recipe", {"name": slug})
-        if isinstance(recipe, dict):
-            hf_id = recipe.get("model")
-            result = await self._safe_call("download_model", {"hf_id": hf_id})
-            self._log_line(f"[download] {hf_id}: {result}")
-        else:
+        if not isinstance(recipe, dict):
             self._log_line(f"[download] get_recipe failed: {recipe}")
+            return
+        hf_id = recipe.get("model")
+        result = await self._safe_call("download_model", {"hf_id": hf_id})
+        if isinstance(result, dict) and result.get("download_id"):
+            self._active_downloads[result["download_id"]] = hf_id or ""
+            self._log_line(f"[download] started {hf_id} (id={result['download_id']})")
+            await self._refresh_recipes()
+        else:
+            self._log_line(f"[download] {hf_id}: {result}")
+
+    async def _poll_downloads(self) -> None:
+        """Periodically check every active download for a progress update; log
+        percentage + byte counts; purge completed ones from the in-flight map."""
+        if self._offline or not self._active_downloads:
+            return
+        finished: list[str] = []
+        for download_id, hf_id in list(self._active_downloads.items()):
+            progress = await self._safe_call(
+                "get_download_progress", {"download_id": download_id}
+            )
+            if not isinstance(progress, dict):
+                continue
+            status = progress.get("status")
+            pct = progress.get("percent")
+            text = progress.get("progress_text")
+            bytes_done = progress.get("bytes_transferred") or 0
+            if status == "in_progress":
+                if pct is not None:
+                    gb = bytes_done / 1e9
+                    self._log_line(f"[download] {hf_id}: {pct:.1f}% ({gb:.2f} GB)")
+                elif text:
+                    self._log_line(f"[download] {hf_id}: {text[:140]}")
+            else:
+                # completed / failed / cancelled / not found
+                err = progress.get("error")
+                suffix = f" ({err})" if err else ""
+                self._log_line(f"[download] {hf_id}: {status}{suffix}")
+                finished.append(download_id)
+        for download_id in finished:
+            self._active_downloads.pop(download_id, None)
+        if finished:
+            await self._refresh_recipes()
 
     async def action_delete_recipe(self) -> None:
         slug = self._current_recipe_slug()
@@ -301,8 +358,19 @@ class SparkTui(App[None]):
         await self._refresh_recipes()
 
     def action_toggle_logs(self) -> None:
-        panel = self.query_one("#logs-row", Log)
-        panel.display = not panel.display
+        """Cycle: recipes + logs (default) -> logs only -> recipes only -> both."""
+        self._pane_mode = (self._pane_mode + 1) % 3
+        recipes = self.query_one("#recipes-row", DataTable)
+        logs = self.query_one("#logs-row", Log)
+        if self._pane_mode == 0:  # both visible
+            recipes.set_class(False, "hidden")
+            logs.set_class(False, "hidden")
+        elif self._pane_mode == 1:  # logs only (full width)
+            recipes.set_class(True, "hidden")
+            logs.set_class(False, "hidden")
+        else:  # recipes only
+            recipes.set_class(False, "hidden")
+            logs.set_class(True, "hidden")
 
     def action_cycle_theme(self) -> None:
         current = self.theme if self.theme in THEMES else THEMES[0]

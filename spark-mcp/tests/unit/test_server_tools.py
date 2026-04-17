@@ -68,6 +68,7 @@ PRD_TOOLS = {
     "launch_recipe",
     "stop_cluster",
     "restart_cluster",
+    "wait_ready",
     "get_gpu_status",
     "get_container_logs",
     "tail_logs",

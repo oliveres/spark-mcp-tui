@@ -1,4 +1,4 @@
 """spark-mcp: MCP server for managing vLLM on DGX Spark clusters."""
 
-__version__ = "0.1.13"
+__version__ = "0.2.0"
 __all__ = ["__version__"]

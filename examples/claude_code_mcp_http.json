@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "spark-mcp": {
+      "transport": "http",
+      "url": "http://spark-head.local:8765/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SPARK_MCP_TOKEN}"
+      }
+    }
+  }
+}

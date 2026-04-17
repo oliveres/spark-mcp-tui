@@ -1,0 +1,29 @@
+# Example docker-compose.yml for running spark-mcp in a container.
+# NOTE: /var/run/docker.sock gives root-equivalent host access. For
+# production, prefer native systemd (see docs/security.md).
+
+services:
+  spark-mcp:
+    image: ghcr.io/oliveres/spark-mcp:latest
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      # Single SSH key, not the whole ~/.ssh (B14 iteration-2 fix)
+      - ${SPARK_MCP_SSH_KEY_PATH:-~/.ssh/id_ed25519_spark}:/keys/id_ed25519:ro
+      - ${SPARK_MCP_KNOWN_HOSTS:-~/.ssh/known_hosts}:/keys/known_hosts:ro
+      # spark-vllm-docker clone (read-only)
+      - ~/spark-vllm-docker:/vllm-docker:ro
+      # HuggingFace cache
+      - ~/.cache/huggingface:/hf-cache
+      # Docker socket - see docs/security.md for mitigation options
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Config + state
+      - ./config.toml:/config/config.toml:ro
+      - ${HOME}/.cache/spark-mcp:/state
+    env_file:
+      - ./.env
+    environment:
+      SPARK_MCP_CONFIG: /config/config.toml
+      SPARK_MCP_SSH_KEY_PATH: /keys/id_ed25519
+      SPARK_MCP_KNOWN_HOSTS: /keys/known_hosts

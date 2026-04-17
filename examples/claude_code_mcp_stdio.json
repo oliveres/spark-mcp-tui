@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "spark-mcp": {
+      "transport": "stdio",
+      "command": "spark-mcp",
+      "args": ["serve"],
+      "env": {
+        "SPARK_MCP_CONFIG": "${HOME}/.config/spark-mcp/config.toml"
+      }
+    }
+  }
+}

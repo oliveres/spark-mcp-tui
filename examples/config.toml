@@ -1,0 +1,87 @@
+# ~/.config/spark-mcp/config.toml
+#
+# Cluster topology and tool behavior.
+# Secrets (auth token, SSH credentials) belong in the .env file.
+
+[server]
+# Bind address: 0.0.0.0 for LAN access, 127.0.0.1 for local only
+host = "0.0.0.0"
+port = 8765
+
+# Transport: "http" (primary, network-accessible) or "stdio" (local only)
+transport = "http"
+
+# Log verbosity: DEBUG, INFO, WARNING, ERROR
+log_level = "INFO"
+
+# Prometheus metrics endpoint at /metrics
+metrics_enabled = true
+
+# Whether /metrics requires the bearer token. "bearer" (default) or "none".
+# "none" is only safe when host is 127.0.0.1 or behind a trusted side-car.
+metrics_auth = "bearer"
+
+# Per-IP rate limit on /mcp, /metrics, /health. 0 disables.
+rate_limit_per_minute = 120
+
+# CORS allow-list for /mcp. Empty list = default-deny (no browser clients).
+cors_allow_origins = []
+
+[cluster]
+# Human-readable cluster name, shown in clients
+name = "my-spark-cluster"
+
+# Head node identifier. Typically "localhost" since spark-mcp
+# runs on the head node itself.
+head_node = "localhost"
+
+# Worker node SSH targets. Must be reachable via SSH key authentication.
+# Format: "hostname", "hostname:port", or "user@hostname"
+workers = ["worker-1", "worker-2"]
+
+# Interconnect IP for model distribution (hf-download.sh --copy-to).
+# Typically the CX-7 link-local address on the head node.
+# Leave empty for auto-detection from routing table.
+interconnect_ip = ""
+
+[spark-vllm-docker]
+# Path to the cloned eugr/spark-vllm-docker repository (or compatible fork).
+# Supports ~ expansion and env vars.
+repo_path = "~/spark-vllm-docker"
+
+# Docker container name used by launch-cluster.sh.
+# Defaults to the upstream value. Override only if you customized it.
+container_name = "vllm_node"
+
+[paths]
+# HuggingFace cache directory (shared with vllm-docker via volume mount)
+hf_cache = "~/.cache/huggingface"
+
+# State and cache for spark-mcp itself
+state_file = "~/.cache/spark-mcp/state.json"
+cache_dir = "~/.cache/spark-mcp/"
+
+[ssh]
+# Connection pool sizing (per worker)
+max_connections_per_worker = 4
+connection_timeout = 10  # seconds
+
+[limits]
+# Maximum models running concurrently.
+# Default: 1 (singleton model contract).
+# May be increased when models fit together in VRAM.
+max_concurrent_models = 1
+
+# Timeout (seconds) for run-recipe.py when launching a recipe. Accommodates cold starts.
+launch_timeout_s = 900
+
+# Timeout (seconds) for docker stop before escalating to docker kill.
+stop_timeout_s = 30
+
+# Maximum concurrent hf-download.sh processes.
+max_concurrent_downloads = 2
+
+# Recipe command policy:
+#   "permissive" — matches upstream vllm-docker; any shell command allowed.
+#   "vllm-only"  — reject recipes whose command does not start with "vllm serve".
+recipe_command_policy = "permissive"

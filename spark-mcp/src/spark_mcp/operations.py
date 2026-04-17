@@ -15,6 +15,21 @@ from pathlib import Path
 from .cluster import Cluster
 from .models import CachedModel, GpuMetrics, NodeStatus
 
+# nvidia-smi reports "[N/A]" / "Not Supported" for metrics unavailable on some
+# hardware (DGX Spark GB10 uses unified memory, so memory.used / memory.total
+# are [N/A]). Treat any unparseable value as 0 so gpu_metrics() never raises.
+_NA_TOKENS: frozenset[str] = frozenset({"", "N/A", "[N/A]", "NOT SUPPORTED"})
+
+
+def _safe_int(value: str) -> int:
+    stripped = value.strip().upper()
+    if stripped in _NA_TOKENS:
+        return 0
+    try:
+        return int(float(value))
+    except ValueError:
+        return 0
+
 
 class Operations:
     """Primitive operations composed from `cluster.run` + result parsing."""
@@ -68,12 +83,12 @@ class Operations:
         parts = [p.strip() for p in row.split(",")]
         return GpuMetrics(
             node=node,
-            name=parts[0],
-            memory_used_mb=int(float(parts[1])),
-            memory_total_mb=int(float(parts[2])),
-            utilization_pct=int(float(parts[3])),
-            temperature_c=int(float(parts[4])),
-            power_watts=int(float(parts[5])),
+            name=parts[0] if parts else "",
+            memory_used_mb=_safe_int(parts[1] if len(parts) > 1 else ""),
+            memory_total_mb=_safe_int(parts[2] if len(parts) > 2 else ""),
+            utilization_pct=_safe_int(parts[3] if len(parts) > 3 else ""),
+            temperature_c=_safe_int(parts[4] if len(parts) > 4 else ""),
+            power_watts=_safe_int(parts[5] if len(parts) > 5 else ""),
         )
 
     async def node_status(self, node: str) -> NodeStatus:

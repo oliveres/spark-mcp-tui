@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-04-17
+
+### Fixed
+
+- DGX Spark GB10 uses unified memory and `nvidia-smi` reports
+  `memory.used=[N/A]` / `memory.total=[N/A]`. The previous
+  `int(float("[N/A]"))` path raised `ValueError`, which `node_status`
+  caught by returning `NodeStatus(reachable=False)` — and the TUI
+  consequently rendered all zeros. `gpu_metrics` now parses
+  `[N/A]` / `N/A` / `Not Supported` / empty values as 0 per field via
+  a new `_safe_int` helper. Added a regression test
+  `test_gpu_metrics_tolerates_na_values`.
+
 ## [0.1.7] - 2026-04-17
 
 ### Fixed

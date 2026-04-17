@@ -58,6 +58,32 @@ async def test_gpu_metrics(cluster: Cluster) -> None:
     assert metrics.temperature_c == 71
 
 
+async def test_gpu_metrics_tolerates_na_values(tmp_path: Path) -> None:
+    """DGX Spark GB10 reports [N/A] for memory.used/total (unified memory)."""
+    from spark_mcp.cluster import FakeShellRunner
+
+    argv = (
+        "nvidia-smi",
+        "--query-gpu=name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw",
+        "--format=csv,noheader,nounits",
+    )
+    fake = FakeShellRunner({("localhost", argv): (0, "NVIDIA GB10, [N/A], [N/A], 0, 50, 4", "")})
+    cluster = Cluster(
+        settings=ClusterSettings(name="t", head_node="localhost", workers=[], interconnect_ip=""),
+        ssh=SshSettings(max_connections_per_worker=1, connection_timeout=5),
+        ssh_user="x",
+        ssh_key_path=tmp_path / "key",
+        runner=fake,
+    )
+    ops = Operations(cluster, hf_cache_dir=Path("/tmp"))
+    metrics = await ops.gpu_metrics("localhost")
+    assert metrics.name == "NVIDIA GB10"
+    assert metrics.memory_used_mb == 0
+    assert metrics.memory_total_mb == 0
+    assert metrics.temperature_c == 50
+    assert metrics.power_watts == 4
+
+
 async def test_node_status(cluster: Cluster) -> None:
     ops = Operations(cluster, hf_cache_dir=Path("/tmp"))
     status = await ops.node_status("localhost")

@@ -195,7 +195,20 @@ class VllmDocker:
     async def start_download(
         self, hf_id: str, interconnect_ip: str | None
     ) -> tuple[DownloadResult, asyncio.subprocess.Process]:  # pragma: no cover
-        """Spawn hf-download.sh as an async subprocess; caller tracks the handle."""
+        """Spawn hf-download.sh as an async subprocess; caller tracks the handle.
+
+        Detects immediate failures (script missing, non-executable, exits
+        within the first 500 ms) and surfaces them as a RuntimeError with
+        the captured stderr — so the caller sees the real reason instead of
+        a silent 'started_at' success that never produces traffic.
+        """
+        import os as _os
+
+        script = self._repo / "hf-download.sh"
+        if not script.exists():
+            raise RuntimeError(f"hf-download.sh not found at {script}")
+        if not _os.access(script, _os.X_OK):
+            raise RuntimeError(f"hf-download.sh at {script} is not executable")
         argv = build_hf_download_argv(
             self._repo,
             hf_id,
@@ -207,6 +220,20 @@ class VllmDocker:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
+        # Early-failure probe: if the script exits within 500 ms, surface
+        # the stderr instead of pretending the download started.
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=0.5)
+        except TimeoutError:
+            pass  # still running — genuine download in flight
+        else:
+            stderr = b""
+            if proc.stderr is not None:
+                stderr = await proc.stderr.read()
+            raise RuntimeError(
+                f"hf-download.sh exited immediately with code {proc.returncode}: "
+                f"{stderr.decode(errors='replace')[-1000:]}"
+            )
         return (
             DownloadResult(
                 download_id=str(uuid.uuid4()),

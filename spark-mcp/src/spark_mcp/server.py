@@ -444,6 +444,9 @@ def build_mcp(ctx: ServerContext, metrics: dict[str, Any] | None = None) -> Fast
                 f"max_concurrent_downloads={cfg.limits.max_concurrent_downloads} reached"
             )
         interconnect = cfg.cluster.interconnect_ip if distribute_to_workers else None
+        # start_download now raises with a clear message if hf-download.sh is
+        # missing / non-executable / exits within 500 ms. We propagate that
+        # as the MCP tool error so the TUI/Claude sees the real failure.
         result, proc = await ctx.vllm_docker.start_download(hf_id, interconnect or None)
         record = DownloadRecord(
             download_id=result.download_id,

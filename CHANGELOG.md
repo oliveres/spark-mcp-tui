@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.9] - 2026-04-17
+## [0.1.10] - 2026-04-17
+
+### Fixed
+
+- `download_model` used to return a successful `DownloadResult` with
+  `started_at` even when `hf-download.sh` died within the first few
+  milliseconds (missing script, not executable, immediate error like
+  missing HF token). The user saw a "started_at" JSON in the TUI but
+  never observed any network traffic. `VllmDocker.start_download` now
+  checks script existence + `os.access(X_OK)` before spawning and waits
+  500 ms after spawn; if the subprocess has already exited the tool
+  raises with the captured stderr so the UI / Claude see the real error.
+
+
 
 ### Added
 

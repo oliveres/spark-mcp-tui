@@ -139,6 +139,15 @@ class ServerContext:
     @classmethod
     async def create(cls, cfg: AppConfig) -> ServerContext:
         kh_path = cfg.config_path.parent / "known_hosts"
+        # Fail-fast with an actionable message when workers require SSH but the
+        # operator hasn't run `spark-mcp ssh-trust <worker>` yet.
+        if cfg.cluster.workers and not kh_path.exists():
+            workers = ", ".join(cfg.cluster.workers)
+            raise RuntimeError(
+                f"SSH known_hosts not found at {kh_path}. "
+                f"Before starting the server, run `spark-mcp ssh-trust <worker>` "
+                f"for each worker: {workers}."
+            )
         cluster = Cluster(
             cfg.cluster,
             cfg.ssh,

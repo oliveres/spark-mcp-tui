@@ -54,6 +54,12 @@ class SecretSettings(BaseSettings):
             )
         return v
 
+    @field_validator("ssh_key_path")
+    @classmethod
+    def _expand_ssh_key_path(cls, v: Path) -> Path:
+        """Expand ~ and $HOME/$USER references from the .env file value."""
+        return Path(os.path.expandvars(str(v))).expanduser()
+
 
 class AppConfig(BaseModel):
     """Aggregated config: TOML structure + secrets."""

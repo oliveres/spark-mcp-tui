@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-17
+
+### Fixed
+
+- `~`, `$HOME`, and `$USER` in `SPARK_MCP_SSH_KEY_PATH` are now expanded
+  before the SSH-key permission check. Previously a literal
+  `~/.ssh/id_ed25519` would fail with `RuntimeError: SSH key not found
+  at ~/.ssh/id_ed25519`.
+- Head-only deployments (`[cluster].workers = []`) no longer require an
+  SSH key or `known_hosts` file — the server skips SSH setup entirely.
+- Clusters with workers now produce an actionable error at startup
+  ("Run `spark-mcp ssh-trust <worker>` for each worker: ...") instead
+  of the opaque internal `ValueError: known_hosts_path is required`.
+
+### Changed
+
+- README quickstart now covers: `spark-mcp check`, the required
+  `ssh-trust <worker>` step before `systemctl enable`, the
+  `/health` + `/metrics` smoke-test, and the TUI config file setup.
+
 ## [0.1.0] - 2026-04-17
 
 ### Added

@@ -67,27 +67,49 @@ spark-mcp init            # writes ~/.config/spark-mcp/{config.toml,.env}
 # 4. Edit config.toml (workers, spark-vllm-docker path) and .env (SSH user/key)
 nano ~/.config/spark-mcp/config.toml
 nano ~/.config/spark-mcp/.env
+spark-mcp check           # sanity-check the config before continuing
 
-# 5. Trust your workers' SSH host keys (first time only)
-spark-mcp ssh-trust worker-1
-spark-mcp ssh-trust worker-2
+# 5. Trust each worker's SSH host key BEFORE starting the service.
+#    spark-mcp refuses to silently accept unknown hosts (security amendment B3).
+spark-mcp ssh-trust spark-2
+# Repeat for each worker in config.toml [cluster].workers.
 
 # 6. Run as a systemd service (recommended) or foreground for testing
 spark-mcp                  # foreground
 # or:
 sudo cp ~/.config/spark-mcp/spark-mcp.service /etc/systemd/system/
 sudo systemctl enable --now spark-mcp
+sudo systemctl status spark-mcp --no-pager
 
-# 7. Install skills into Claude Code / Claude Desktop
+# 7. Verify
+TOKEN=$(grep SPARK_MCP_AUTH_TOKEN ~/.config/spark-mcp/.env | cut -d= -f2)
+curl -s http://localhost:8765/health                               # {"ok": true}
+curl -sH "Authorization: Bearer $TOKEN" http://localhost:8765/metrics | head -5
+
+# 8. Install skills into Claude Code / Claude Desktop
 ./spark-skills/install.sh
 
-# 8. Register the MCP server in Claude Code (from any workstation on the LAN)
-TOKEN=$(grep SPARK_MCP_AUTH_TOKEN ~/.config/spark-mcp/.env | cut -d= -f2)
+# 9. Register the MCP server in Claude Code (from any workstation on the LAN)
 claude mcp add spark-mcp --transport http \
     http://spark-head.local:8765/mcp \
     --header "Authorization: Bearer $TOKEN"
 
-# 9. Launch the TUI
+# 10. Configure and launch the TUI (optional)
+mkdir -p ~/.config/spark-tui
+cat > ~/.config/spark-tui/config.toml <<'TOML'
+[connection]
+default_profile = "homelab"
+
+[profiles.homelab]
+mcp_url = "http://localhost:8765/mcp"
+
+[ui]
+theme = "dracula"
+refresh_interval_ms = 3000
+log_tail_lines = 200
+TOML
+echo "SPARK_TUI_TOKEN_HOMELAB=$TOKEN" > ~/.config/spark-tui/.env
+chmod 600 ~/.config/spark-tui/.env
 spark-tui --profile homelab
 ```
 

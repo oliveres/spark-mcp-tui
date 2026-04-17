@@ -106,16 +106,19 @@ class AsyncSshRunner:
         workers: list[str],
         ssh_user: str,
         ssh_key_path: Path,
-        known_hosts_path: Path,
+        known_hosts_path: Path | None,
         max_per_worker: int,
         connect_timeout: int,
+        *,
+        skip_ssh_validation: bool = False,
     ) -> None:
-        _verify_key_permissions(ssh_key_path)
-        if not known_hosts_path.exists():
-            raise RuntimeError(
-                f"SSH known_hosts not found at {known_hosts_path}. "
-                "Run `spark-mcp ssh-trust <worker>` for each worker first."
-            )
+        if not skip_ssh_validation:
+            _verify_key_permissions(ssh_key_path)
+            if known_hosts_path is None or not known_hosts_path.exists():
+                raise RuntimeError(
+                    f"SSH known_hosts not found at {known_hosts_path}. "
+                    "Run `spark-mcp ssh-trust <worker>` for each worker first."
+                )
         self._head_node = head_node
         self._workers = workers
         self._ssh_user = ssh_user
@@ -241,6 +244,19 @@ class Cluster:
         self.ssh = ssh
         if runner is not None:
             self._runner: ShellRunner = runner
+        elif not settings.workers:
+            # Head-only deployment: no SSH needed, but local subprocess still works
+            # by routing every call through the localhost branch of AsyncSshRunner.
+            self._runner = AsyncSshRunner(
+                head_node=settings.head_node,
+                workers=[],
+                ssh_user=ssh_user,
+                ssh_key_path=ssh_key_path,
+                known_hosts_path=known_hosts_path,
+                max_per_worker=ssh.max_connections_per_worker,
+                connect_timeout=ssh.connection_timeout,
+                skip_ssh_validation=True,
+            )
         else:
             if known_hosts_path is None:
                 raise ValueError(

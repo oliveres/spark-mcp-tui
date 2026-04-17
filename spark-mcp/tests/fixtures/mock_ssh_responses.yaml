@@ -1,0 +1,32 @@
+# Fixture keyed by (node, argv-tuple-as-space-joined-string) — see test_operations.py loader.
+"localhost|docker|ps|--format|{{json .}}":
+  exit: 0
+  stdout: |
+    {"Names":"vllm_node","State":"running","ID":"abc123"}
+  stderr: ""
+
+"localhost|nvidia-smi|--query-gpu=name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw|--format=csv,noheader,nounits":
+  exit: 0
+  stdout: |
+    NVIDIA GB10, 94000, 128000, 87, 71, 215
+  stderr: ""
+
+"localhost|hostname":
+  exit: 0
+  stdout: "head"
+  stderr: ""
+
+"localhost|cat|/proc/uptime":
+  exit: 0
+  stdout: "12345.67 0.0"
+  stderr: ""
+
+"localhost|docker|logs|--tail|100|vllm_node":
+  exit: 0
+  stdout: "INFO vllm ready\n"
+  stderr: ""
+
+"localhost|docker|stop|-t|30|vllm_node":
+  exit: 0
+  stdout: "vllm_node"
+  stderr: ""

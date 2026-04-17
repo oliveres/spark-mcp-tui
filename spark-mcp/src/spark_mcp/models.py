@@ -187,3 +187,74 @@ class OperationResult(BaseModel):
     success: bool
     data: Any | None = None
     error: ErrorInfo | None = None
+
+
+# --- Monitoring / cluster status models (added in Task 6) ---
+
+
+class GpuMetrics(BaseModel):
+    node: str
+    name: str
+    memory_used_mb: int
+    memory_total_mb: int
+    utilization_pct: int
+    temperature_c: int
+    power_watts: int
+
+
+class NodeStatus(BaseModel):
+    name: str
+    reachable: bool
+    hostname: str
+    docker_running_containers: list[str] = Field(default_factory=list)
+    gpu: GpuMetrics | None = None
+    uptime_seconds: int = 0
+
+
+class RayStatus(BaseModel):
+    alive: bool
+    head_address: str
+    nodes: list[str]
+
+
+class ClusterStatus(BaseModel):
+    cluster_name: str
+    head_node: NodeStatus
+    workers: list[NodeStatus]
+    active_model: ActiveModel | None = None
+    ray_status: RayStatus | None = None
+    total_vram_gb: float = 0.0
+    used_vram_gb: float = 0.0
+
+
+class CachedModel(BaseModel):
+    hf_id: str
+    nodes: list[str]
+    size_gb: float
+    last_modified: datetime
+
+
+class HealthStatus(BaseModel):
+    ok: bool
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class ClusterInfo(BaseModel):
+    name: str
+    nodes: list[str]
+    vram_per_node_gb: dict[str, float]
+    total_vram_gb: float
+    vllm_docker_version: str | None = None
+
+
+class HfSearchResult(BaseModel):
+    """Subset of Hugging Face Hub API response for `search_huggingface`."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    author: str | None = None
+    downloads: int | None = None
+    likes: int | None = None
+    tags: list[str] = Field(default_factory=list)
+    last_modified: datetime | None = None

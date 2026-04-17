@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-04-17
+
+### Fixed
+
+- **`launch_recipe` runs `run-recipe.py` from the vllm-docker repo.**
+  When `setup=True` triggers a `docker build`, the script greps for
+  `Dockerfile` in the current working directory. Under systemd the
+  service starts from `$HOME` (not the repo), so the build aborted
+  with `grep: Dockerfile: No such file or directory`. The cluster
+  runner now accepts a `cwd=` argument, and `VllmDocker.launch_recipe`
+  passes `cwd=<repo_path>` so subprocess and SSH branches both land
+  in the correct directory before invoking `run-recipe.py`.
+
 ## [0.2.1] - 2026-04-17
 
 ### Fixed

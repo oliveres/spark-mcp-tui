@@ -192,7 +192,10 @@ class VllmDocker:
                 error=ErrorInfo(code="LAUNCH_FAILED", message=str(exc)),
             )
         result = await self._cluster.run(
-            self._cluster.settings.head_node, argv, timeout=float(self._launch_timeout_s)
+            self._cluster.settings.head_node,
+            argv,
+            timeout=float(self._launch_timeout_s),
+            cwd=self._repo,
         )
         if result.exit_code != 0:
             return LaunchResult(

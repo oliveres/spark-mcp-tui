@@ -47,6 +47,7 @@ class ShellRunner(Protocol):
         argv: list[str],
         *,
         timeout: float,  # noqa: ASYNC109
+        cwd: str | Path | None = None,
     ) -> ShellResult: ...
 
     async def close(self) -> None: ...
@@ -61,7 +62,14 @@ class FakeShellRunner:
     def __init__(self, responses: dict[FakeKey, tuple[int, str, str]]) -> None:
         self._responses = responses
 
-    async def run(self, node: str, argv: list[str], *, timeout: float) -> ShellResult:  # noqa: ASYNC109
+    async def run(
+        self,
+        node: str,
+        argv: list[str],
+        *,
+        timeout: float,  # noqa: ASYNC109
+        cwd: str | Path | None = None,
+    ) -> ShellResult:
         key = (node, tuple(argv))
         if key not in self._responses:
             raise KeyError(f"No fake response configured for {key!r}")
@@ -153,14 +161,23 @@ class AsyncSshRunner:
                 )
             return self._conns[node]
 
-    async def run(self, node: str, argv: list[str], *, timeout: float) -> ShellResult:  # noqa: ASYNC109  # pragma: no cover
+    async def run(
+        self,
+        node: str,
+        argv: list[str],
+        *,
+        timeout: float,  # noqa: ASYNC109
+        cwd: str | Path | None = None,
+    ) -> ShellResult:  # pragma: no cover
         # Real local/remote shell invocations are exercised by integration tests.
         start = time.monotonic()
+        cwd_str = str(cwd) if cwd is not None else None
         if self._is_local(node):
             proc = await _spawn_subprocess(
                 *argv,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                cwd=cwd_str,
             )
             try:
                 out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
@@ -181,6 +198,8 @@ class AsyncSshRunner:
         async with sem:
             conn = await self._get_conn(node)
             cmd = shell_escape_argv(argv)
+            if cwd_str is not None:
+                cmd = f"cd {shlex.quote(cwd_str)} && {cmd}"
             result = await conn.run(cmd, check=False, timeout=timeout)
             return ShellResult(
                 node=node,
@@ -280,15 +299,34 @@ class Cluster:
     def all_nodes(self) -> list[str]:
         return [self.settings.head_node, *self.settings.workers]
 
-    async def run(self, node: str, argv: list[str], *, timeout: float = 60.0) -> ShellResult:  # noqa: ASYNC109
-        return await self._runner.run(node, argv, timeout=timeout)
+    async def run(
+        self,
+        node: str,
+        argv: list[str],
+        *,
+        timeout: float = 60.0,  # noqa: ASYNC109
+        cwd: str | Path | None = None,
+    ) -> ShellResult:
+        return await self._runner.run(node, argv, timeout=timeout, cwd=cwd)
 
-    async def run_all(self, argv: list[str], *, timeout: float = 60.0) -> list[ShellResult]:  # noqa: ASYNC109
-        tasks = [self.run(n, argv, timeout=timeout) for n in self.all_nodes]
+    async def run_all(
+        self,
+        argv: list[str],
+        *,
+        timeout: float = 60.0,  # noqa: ASYNC109
+        cwd: str | Path | None = None,
+    ) -> list[ShellResult]:
+        tasks = [self.run(n, argv, timeout=timeout, cwd=cwd) for n in self.all_nodes]
         return list(await asyncio.gather(*tasks))
 
-    async def run_workers(self, argv: list[str], *, timeout: float = 60.0) -> list[ShellResult]:  # noqa: ASYNC109
-        tasks = [self.run(w, argv, timeout=timeout) for w in self.settings.workers]
+    async def run_workers(
+        self,
+        argv: list[str],
+        *,
+        timeout: float = 60.0,  # noqa: ASYNC109
+        cwd: str | Path | None = None,
+    ) -> list[ShellResult]:
+        tasks = [self.run(w, argv, timeout=timeout, cwd=cwd) for w in self.settings.workers]
         return list(await asyncio.gather(*tasks))
 
     async def aclose(self) -> None:
